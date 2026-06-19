@@ -53,7 +53,7 @@ paymentsRouter.post("/create-session", authRequired, async (req, res) => {
 
   let quote;
   try {
-    quote = store.quoteCart(lines);
+    quote = await store.quoteCart(lines);
   } catch (err) {
     return res.status(err.code || 400).json({ error: err.message });
   }
@@ -92,7 +92,7 @@ paymentsRouter.post("/create-session", authRequired, async (req, res) => {
     });
 
     // Mémorise le panier pour finaliser la commande après paiement.
-    store.savePendingCheckout(session.id, req.user.id, {
+    await store.savePendingCheckout(session.id, req.user.id, {
       shipping: {
         fullName: String(shipping.fullName).trim(),
         address: String(shipping.address).trim(),
@@ -126,14 +126,14 @@ paymentsRouter.post("/confirm", authRequired, async (req, res) => {
     return res.status(400).json({ error: "Session manquante." });
   }
 
-  const pending = store.getPendingCheckout(sessionId);
+  const pending = await store.getPendingCheckout(sessionId);
   if (!pending || pending.userId !== req.user.id) {
     return res.status(404).json({ error: "Session de paiement introuvable." });
   }
 
   // Commande déjà finalisée (rechargement de page) → renvoie l'existante.
   if (pending.orderId) {
-    return res.json({ order: store.getOrderById(pending.orderId) });
+    return res.json({ order: await store.getOrderById(pending.orderId) });
   }
 
   let session;
@@ -148,14 +148,14 @@ paymentsRouter.post("/confirm", authRequired, async (req, res) => {
   }
 
   try {
-    const order = store.checkout(
+    const order = await store.checkout(
       req.user.id,
       pending.data.shipping,
       pending.data.lines,
       pending.data.delivery,
       pending.data.payment
     );
-    store.markPendingFinalized(sessionId, order.id);
+    await store.markPendingFinalized(sessionId, order.id);
     sendOrderNotification(order).catch(() => {});
     res.status(201).json({ order });
   } catch (err) {

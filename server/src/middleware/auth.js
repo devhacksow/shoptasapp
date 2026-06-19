@@ -3,7 +3,7 @@ import { JWT_SECRET } from "../config.js";
 import { store } from "../store.js";
 
 /** Extrait le token Bearer et attache l'utilisateur à req.user si valide. */
-export function authRequired(req, res, next) {
+export async function authRequired(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) {
@@ -11,7 +11,7 @@ export function authRequired(req, res, next) {
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const user = store.findUserById(payload.sub);
+    const user = await store.findUserById(payload.sub);
     if (!user) {
       return res.status(401).json({ error: "Utilisateur introuvable." });
     }

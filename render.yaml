@@ -22,6 +22,16 @@ services:
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
+      # Base PostgreSQL (Neon) — connection string
+      - key: DATABASE_URL
+        sync: false
+      # Stockage d'images Cloudinary
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
       # URL du front Vercel (ex. https://shoptasapp.vercel.app)
       - key: APP_URL
         sync: false
@@ -38,12 +48,5 @@ services:
         sync: false
       - key: MAIL_FROM
         value: ShopTaSapp <no-reply@shoptasapp.com>
-    # IMPORTANT : pour conserver les données (commandes, comptes, images),
-    # ajoute un disque persistant (plan payant Render) et définis DATA_DIR=/data.
-    # Sur le plan gratuit sans disque, les données sont réinitialisées à chaque
-    # redéploiement/redémarrage.
-    # disk:
-    #   name: data
-    #   mountPath: /data
-    #   sizeGB: 1
-    # Puis ajoute la variable : DATA_DIR=/data
+    # Données dans PostgreSQL (Neon) et images dans Cloudinary :
+    # aucun disque persistant nécessaire, compatible plan gratuit Render.

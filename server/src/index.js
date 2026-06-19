@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { PORT } from "./config.js";
+import { initDb } from "./db.js";
 import { authRouter } from "./routes/auth.js";
 import { shopRouter } from "./routes/shop.js";
 import { adminRouter } from "./routes/admin.js";
@@ -41,6 +42,13 @@ app.use((_req, res) => {
   res.status(404).json({ error: "Ressource introuvable." });
 });
 
-app.listen(PORT, () => {
-  console.log(`API Vinted démarrée sur http://localhost:${PORT}`);
-});
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`API ShopTaSapp démarrée sur http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Échec de l'initialisation de la base :", err.message);
+    process.exit(1);
+  });

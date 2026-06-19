@@ -1,20 +1,9 @@
-// Couche d'accès aux données e-commerce, adossée à SQLite.
+// Couche d'accès aux données e-commerce, adossée à PostgreSQL (asynchrone).
 import { randomUUID } from "node:crypto";
-import { db } from "./db.js";
+import { pool, q } from "./db.js";
 import { categories } from "./data/catalog.js";
 
-function variantsOf(productId) {
-  return db
-    .prepare(
-      "SELECT id, color, size, stock FROM variants WHERE product_id = ? ORDER BY rowid"
-    )
-    .all(productId)
-    .map((v) => ({ id: v.id, color: v.color, size: v.size, stock: v.stock }));
-}
-
-function rowToProduct(row) {
-  if (!row) return undefined;
-  const variants = variantsOf(row.id);
+function buildProduct(row, variants) {
   const totalStock = variants.reduce((s, v) => s + v.stock, 0);
   const colors = [...new Set(variants.map((v) => v.color).filter(Boolean))];
   return {
@@ -32,18 +21,38 @@ function rowToProduct(row) {
   };
 }
 
-function rowToUser(row) {
+async function variantsFor(productIds) {
+  if (productIds.length === 0) return new Map();
+  const { rows } = await q(
+    "SELECT id, product_id, color, size, stock FROM variants WHERE product_id = ANY($1) ORDER BY id",
+    [productIds]
+  );
+  const map = new Map();
+  for (const v of rows) {
+    if (!map.has(v.product_id)) map.set(v.product_id, []);
+    map.get(v.product_id).push({
+      id: v.id,
+      color: v.color,
+      size: v.size,
+      stock: v.stock,
+    });
+  }
+  return map;
+}
+
+async function buildUser(row) {
   if (!row) return undefined;
-  const favRows = db
-    .prepare("SELECT product_id FROM favorites WHERE user_id = ?")
-    .all(row.id);
+  const { rows } = await q(
+    "SELECT product_id FROM favorites WHERE user_id = $1",
+    [row.id]
+  );
   return {
     id: row.id,
     email: row.email,
     username: row.username,
     passwordHash: row.password_hash,
     role: row.role || "user",
-    favorites: new Set(favRows.map((r) => r.product_id)),
+    favorites: new Set(rows.map((r) => r.product_id)),
     createdAt: row.created_at,
   };
 }
@@ -52,31 +61,30 @@ export const store = {
   categories,
 
   // --- Utilisateurs ---
-  findUserByEmail(email) {
-    const row = db
-      .prepare("SELECT * FROM users WHERE lower(email) = lower(?)")
-      .get(email);
-    return rowToUser(row);
+  async findUserByEmail(email) {
+    const { rows } = await q("SELECT * FROM users WHERE lower(email) = lower($1)", [
+      email,
+    ]);
+    return buildUser(rows[0]);
   },
 
-  findUserById(id) {
-    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
-    return rowToUser(row);
+  async findUserById(id) {
+    const { rows } = await q("SELECT * FROM users WHERE id = $1", [id]);
+    return buildUser(rows[0]);
   },
 
-  createUser({ email, username, passwordHash }) {
+  async createUser({ email, username, passwordHash }) {
     const id = `u_${randomUUID()}`;
-    const createdAt = new Date().toISOString();
-    db.prepare(
+    await q(
       `INSERT INTO users (id, email, username, password_hash, created_at)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(id, email, username, passwordHash, createdAt);
+       VALUES ($1,$2,$3,$4,$5)`,
+      [id, email, username, passwordHash, new Date().toISOString()]
+    );
     return this.findUserById(id);
   },
 
-  // Crée ou récupère un utilisateur authentifié via Google (sans mot de passe utilisable)
-  findOrCreateOAuthUser({ email, username }) {
-    const existing = this.findUserByEmail(email);
+  async findOrCreateOAuthUser({ email, username }) {
+    const existing = await this.findUserByEmail(email);
     if (existing) return existing;
     return this.createUser({
       email,
@@ -86,23 +94,24 @@ export const store = {
   },
 
   // --- Produits ---
-  listProducts({ q, category, sort, minPrice, maxPrice } = {}) {
+  async listProducts({ q: term, category, sort, minPrice, maxPrice } = {}) {
     const clauses = [];
     const params = [];
+    let i = 1;
     if (category) {
-      clauses.push("category_id = ?");
+      clauses.push(`category_id = $${i++}`);
       params.push(category);
     }
-    if (q && q.trim()) {
-      clauses.push("lower(name) LIKE ?");
-      params.push(`%${q.trim().toLowerCase()}%`);
+    if (term && term.trim()) {
+      clauses.push(`name ILIKE $${i++}`);
+      params.push(`%${term.trim()}%`);
     }
     if (Number.isFinite(minPrice)) {
-      clauses.push("price_cents >= ?");
+      clauses.push(`price_cents >= $${i++}`);
       params.push(Math.round(minPrice));
     }
     if (Number.isFinite(maxPrice)) {
-      clauses.push("price_cents <= ?");
+      clauses.push(`price_cents <= $${i++}`);
       params.push(Math.round(maxPrice));
     }
     let sql = "SELECT * FROM products";
@@ -121,121 +130,135 @@ export const store = {
         sql += " ORDER BY created_at DESC, id ASC";
         break;
     }
-    return db.prepare(sql).all(...params).map(rowToProduct);
+    const { rows } = await q(sql, params);
+    const vmap = await variantsFor(rows.map((r) => r.id));
+    return rows.map((r) => buildProduct(r, vmap.get(r.id) || []));
   },
 
-  getProductById(id) {
-    const row = db.prepare("SELECT * FROM products WHERE id = ?").get(id);
-    return rowToProduct(row);
+  async getProductById(id) {
+    const { rows } = await q("SELECT * FROM products WHERE id = $1", [id]);
+    if (!rows[0]) return undefined;
+    const vmap = await variantsFor([id]);
+    return buildProduct(rows[0], vmap.get(id) || []);
   },
 
-  createProduct(data) {
+  async createProduct(data) {
     const id = `p_${randomUUID()}`;
-    const createdAt = new Date().toISOString();
-    const tx = db.transaction(() => {
-      db.prepare(
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
         `INSERT INTO products (id, name, brand, category_id, description, price_cents, image_url, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        id,
-        data.name,
-        data.brand || "ShopTaSapp",
-        data.categoryId,
-        data.description,
-        data.priceCents,
-        data.imageUrl,
-        createdAt
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          id,
+          data.name,
+          data.brand || "ShopTaSapp",
+          data.categoryId,
+          data.description,
+          data.priceCents,
+          data.imageUrl,
+          new Date().toISOString(),
+        ]
       );
       for (const v of data.variants) {
-        db.prepare(
-          "INSERT INTO variants (id, product_id, color, size, stock) VALUES (?, ?, ?, ?, ?)"
-        ).run(`v_${randomUUID()}`, id, v.color || "", v.size, v.stock);
+        await client.query(
+          "INSERT INTO variants (id, product_id, color, size, stock) VALUES ($1,$2,$3,$4,$5)",
+          [`v_${randomUUID()}`, id, v.color || "", v.size, v.stock]
+        );
       }
-    });
-    tx();
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
     return this.getProductById(id);
   },
 
-  updateProduct(id, data) {
-    const existing = this.getProductById(id);
+  async updateProduct(id, data) {
+    const existing = await this.getProductById(id);
     if (!existing) return undefined;
-    const tx = db.transaction(() => {
-      db.prepare(
-        `UPDATE products SET name = ?, category_id = ?, description = ?, price_cents = ?, image_url = ?
-         WHERE id = ?`
-      ).run(
-        data.name,
-        data.categoryId,
-        data.description,
-        data.priceCents,
-        data.imageUrl,
-        id
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `UPDATE products SET name=$1, category_id=$2, description=$3, price_cents=$4, image_url=$5 WHERE id=$6`,
+        [data.name, data.categoryId, data.description, data.priceCents, data.imageUrl, id]
       );
       if (Array.isArray(data.variants)) {
-        db.prepare("DELETE FROM variants WHERE product_id = ?").run(id);
+        await client.query("DELETE FROM variants WHERE product_id = $1", [id]);
         for (const v of data.variants) {
-          db.prepare(
-            "INSERT INTO variants (id, product_id, color, size, stock) VALUES (?, ?, ?, ?, ?)"
-          ).run(`v_${randomUUID()}`, id, v.color || "", v.size, v.stock);
+          await client.query(
+            "INSERT INTO variants (id, product_id, color, size, stock) VALUES ($1,$2,$3,$4,$5)",
+            [`v_${randomUUID()}`, id, v.color || "", v.size, v.stock]
+          );
         }
       }
-    });
-    tx();
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
     return this.getProductById(id);
   },
 
-  deleteProduct(id) {
-    const info = db.prepare("DELETE FROM products WHERE id = ?").run(id);
-    return info.changes > 0;
+  async deleteProduct(id) {
+    const res = await q("DELETE FROM products WHERE id = $1", [id]);
+    return res.rowCount > 0;
   },
 
-  // --- Favoris (wishlist) ---
-  toggleFavorite(userId, productId) {
-    const exists = db
-      .prepare("SELECT 1 FROM favorites WHERE user_id = ? AND product_id = ?")
-      .get(userId, productId);
-    if (exists) {
-      db.prepare(
-        "DELETE FROM favorites WHERE user_id = ? AND product_id = ?"
-      ).run(userId, productId);
+  // --- Favoris ---
+  async toggleFavorite(userId, productId) {
+    const { rows } = await q(
+      "SELECT 1 FROM favorites WHERE user_id=$1 AND product_id=$2",
+      [userId, productId]
+    );
+    if (rows.length) {
+      await q("DELETE FROM favorites WHERE user_id=$1 AND product_id=$2", [
+        userId,
+        productId,
+      ]);
     } else {
-      db.prepare(
-        "INSERT INTO favorites (user_id, product_id) VALUES (?, ?)"
-      ).run(userId, productId);
+      await q("INSERT INTO favorites (user_id, product_id) VALUES ($1,$2)", [
+        userId,
+        productId,
+      ]);
     }
-    return db
-      .prepare("SELECT product_id FROM favorites WHERE user_id = ?")
-      .all(userId)
-      .map((r) => r.product_id);
+    const fav = await q("SELECT product_id FROM favorites WHERE user_id=$1", [
+      userId,
+    ]);
+    return fav.rows.map((r) => r.product_id);
   },
 
-  listFavoriteProducts(userId) {
-    return db
-      .prepare(
-        `SELECT p.* FROM products p
-         JOIN favorites f ON f.product_id = p.id
-         WHERE f.user_id = ?
-         ORDER BY p.created_at DESC`
-      )
-      .all(userId)
-      .map(rowToProduct);
+  async listFavoriteProducts(userId) {
+    const { rows } = await q(
+      `SELECT p.* FROM products p
+       JOIN favorites f ON f.product_id = p.id
+       WHERE f.user_id = $1 ORDER BY p.created_at DESC`,
+      [userId]
+    );
+    const vmap = await variantsFor(rows.map((r) => r.id));
+    return rows.map((r) => buildProduct(r, vmap.get(r.id) || []));
   },
 
   // --- Checkout / commandes ---
-  // Calcule le montant et valide le stock SANS créer de commande (pour Stripe).
-  quoteCart(lines) {
+  // Calcule le montant et valide le stock SANS créer de commande.
+  async quoteCart(lines) {
     let itemsCents = 0;
     const resolved = [];
     for (const line of lines) {
-      const product = db
-        .prepare("SELECT * FROM products WHERE id = ?")
-        .get(line.productId);
+      const pr = await q("SELECT * FROM products WHERE id = $1", [line.productId]);
+      const product = pr.rows[0];
       if (!product) throw { code: 400, message: "Produit introuvable." };
-      const variant = db
-        .prepare(
-          "SELECT * FROM variants WHERE product_id = ? AND size = ? AND color = ?"
-        )
-        .get(line.productId, line.size, line.color || "");
+      const vr = await q(
+        "SELECT * FROM variants WHERE product_id=$1 AND size=$2 AND color=$3",
+        [line.productId, line.size, line.color || ""]
+      );
+      const variant = vr.rows[0];
       if (!variant)
         throw { code: 400, message: `Déclinaison indisponible pour ${product.name}.` };
       const qty = Math.max(1, Math.floor(line.quantity));
@@ -251,127 +274,121 @@ export const store = {
   },
 
   // --- Paniers en attente de paiement Stripe ---
-  savePendingCheckout(sessionId, userId, data) {
-    db.prepare(
-      `INSERT OR REPLACE INTO pending_checkouts (session_id, user_id, data, order_id, created_at)
-       VALUES (?, ?, ?, NULL, ?)`
-    ).run(sessionId, userId, JSON.stringify(data), new Date().toISOString());
+  async savePendingCheckout(sessionId, userId, data) {
+    await q(
+      `INSERT INTO pending_checkouts (session_id, user_id, data, order_id, created_at)
+       VALUES ($1,$2,$3,NULL,$4)
+       ON CONFLICT (session_id) DO UPDATE SET data = EXCLUDED.data`,
+      [sessionId, userId, JSON.stringify(data), new Date().toISOString()]
+    );
   },
 
-  getPendingCheckout(sessionId) {
-    const row = db
-      .prepare("SELECT * FROM pending_checkouts WHERE session_id = ?")
-      .get(sessionId);
-    if (!row) return undefined;
+  async getPendingCheckout(sessionId) {
+    const { rows } = await q(
+      "SELECT * FROM pending_checkouts WHERE session_id = $1",
+      [sessionId]
+    );
+    if (!rows[0]) return undefined;
     return {
-      sessionId: row.session_id,
-      userId: row.user_id,
-      data: JSON.parse(row.data),
-      orderId: row.order_id,
+      sessionId: rows[0].session_id,
+      userId: rows[0].user_id,
+      data: JSON.parse(rows[0].data),
+      orderId: rows[0].order_id,
     };
   },
 
-  markPendingFinalized(sessionId, orderId) {
-    db.prepare(
-      "UPDATE pending_checkouts SET order_id = ? WHERE session_id = ?"
-    ).run(orderId, sessionId);
+  async markPendingFinalized(sessionId, orderId) {
+    await q("UPDATE pending_checkouts SET order_id=$1 WHERE session_id=$2", [
+      orderId,
+      sessionId,
+    ]);
   },
 
   // lines: [{ productId, color, size, quantity }]
-  checkout(userId, shipping, lines, delivery, payment) {
-    return db.transaction(() => {
-      let total = 0;
+  async checkout(userId, shipping, lines, delivery, payment) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      let itemsCents = 0;
       const resolved = [];
-
       for (const line of lines) {
-        const product = db
-          .prepare("SELECT * FROM products WHERE id = ?")
-          .get(line.productId);
-        if (!product) {
-          throw { code: 400, message: `Produit introuvable.` };
-        }
-        const variant = db
-          .prepare(
-            "SELECT * FROM variants WHERE product_id = ? AND size = ? AND color = ?"
-          )
-          .get(line.productId, line.size, line.color || "");
-        if (!variant) {
-          throw {
-            code: 400,
-            message: `Déclinaison indisponible pour ${product.name}.`,
-          };
-        }
+        const pr = await client.query("SELECT * FROM products WHERE id=$1", [
+          line.productId,
+        ]);
+        const product = pr.rows[0];
+        if (!product) throw { code: 400, message: "Produit introuvable." };
+        const vr = await client.query(
+          "SELECT * FROM variants WHERE product_id=$1 AND size=$2 AND color=$3 FOR UPDATE",
+          [line.productId, line.size, line.color || ""]
+        );
+        const variant = vr.rows[0];
+        if (!variant)
+          throw { code: 400, message: `Déclinaison indisponible pour ${product.name}.` };
         const qty = Math.max(1, Math.floor(line.quantity));
-        if (variant.stock < qty) {
+        if (variant.stock < qty)
           throw {
             code: 409,
             message: `Stock insuffisant pour ${product.name} (${variant.color} / ${line.size}).`,
           };
-        }
-        total += product.price_cents * qty;
+        itemsCents += product.price_cents * qty;
         resolved.push({ product, variant, qty });
       }
 
-      const grandTotal = total + (delivery?.priceCents || 0);
+      const grandTotal = itemsCents + (delivery?.priceCents || 0);
       const orderId = `o_${randomUUID()}`;
-      const createdAt = new Date().toISOString();
-      db.prepare(
+      await client.query(
         `INSERT INTO orders (id, user_id, total_cents, delivery_cents, delivery_method, payment_method, status, full_name, address, city, zip, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'payée', ?, ?, ?, ?, ?)`
-      ).run(
-        orderId,
-        userId,
-        grandTotal,
-        delivery?.priceCents || 0,
-        delivery?.label || "",
-        payment?.label || "",
-        shipping.fullName,
-        shipping.address,
-        shipping.city,
-        shipping.zip,
-        createdAt
-      );
-
-      for (const { product, variant, qty } of resolved) {
-        db.prepare(
-          `INSERT INTO order_items (id, order_id, product_id, name, color, size, unit_price_cents, quantity, image_url)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(
-          `oi_${randomUUID()}`,
+         VALUES ($1,$2,$3,$4,$5,$6,'payée',$7,$8,$9,$10,$11)`,
+        [
           orderId,
-          product.id,
-          product.name,
-          variant.color,
-          variant.size,
-          product.price_cents,
-          qty,
-          product.image_url
+          userId,
+          grandTotal,
+          delivery?.priceCents || 0,
+          delivery?.label || "",
+          payment?.label || "",
+          shipping.fullName,
+          shipping.address,
+          shipping.city,
+          shipping.zip,
+          new Date().toISOString(),
+        ]
+      );
+      for (const { product, variant, qty } of resolved) {
+        await client.query(
+          `INSERT INTO order_items (id, order_id, product_id, name, color, size, unit_price_cents, quantity, image_url)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [
+            `oi_${randomUUID()}`,
+            orderId,
+            product.id,
+            product.name,
+            variant.color,
+            variant.size,
+            product.price_cents,
+            qty,
+            product.image_url,
+          ]
         );
-        db.prepare("UPDATE variants SET stock = stock - ? WHERE id = ?").run(
+        await client.query("UPDATE variants SET stock = stock - $1 WHERE id = $2", [
           qty,
-          variant.id
-        );
+          variant.id,
+        ]);
       }
-
+      await client.query("COMMIT");
       return this.getOrderById(orderId);
-    })();
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
   },
 
-  getOrderById(id) {
-    const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(id);
+  async getOrderById(id) {
+    const or = await q("SELECT * FROM orders WHERE id = $1", [id]);
+    const order = or.rows[0];
     if (!order) return undefined;
-    const items = db
-      .prepare("SELECT * FROM order_items WHERE order_id = ?")
-      .all(id)
-      .map((it) => ({
-        productId: it.product_id,
-        name: it.name,
-        color: it.color,
-        size: it.size,
-        unitPriceCents: it.unit_price_cents,
-        quantity: it.quantity,
-        imageUrl: it.image_url,
-      }));
+    const it = await q("SELECT * FROM order_items WHERE order_id = $1", [id]);
     return {
       id: order.id,
       totalCents: order.total_cents,
@@ -386,67 +403,74 @@ export const store = {
         zip: order.zip,
       },
       createdAt: order.created_at,
-      items,
+      items: it.rows.map((r) => ({
+        productId: r.product_id,
+        name: r.name,
+        color: r.color,
+        size: r.size,
+        unitPriceCents: r.unit_price_cents,
+        quantity: r.quantity,
+        imageUrl: r.image_url,
+      })),
     };
   },
 
-  listOrdersByUser(userId) {
-    return db
-      .prepare("SELECT id FROM orders WHERE user_id = ? ORDER BY created_at DESC")
-      .all(userId)
-      .map((r) => this.getOrderById(r.id));
+  async listOrdersByUser(userId) {
+    const { rows } = await q(
+      "SELECT id FROM orders WHERE user_id=$1 ORDER BY created_at DESC",
+      [userId]
+    );
+    const orders = [];
+    for (const r of rows) orders.push(await this.getOrderById(r.id));
+    return orders;
   },
 
-  setOrderStatus(orderId, status) {
-    db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, orderId);
+  async setOrderStatus(orderId, status) {
+    await q("UPDATE orders SET status=$1 WHERE id=$2", [status, orderId]);
     return this.getOrderById(orderId);
   },
 
   // --- Administration ---
-  listAllUsers() {
-    return db
-      .prepare(
-        `SELECT u.id, u.email, u.username, u.role, u.created_at,
-                (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS orders_count
-         FROM users u ORDER BY u.created_at DESC`
-      )
-      .all();
+  async listAllUsers() {
+    const { rows } = await q(
+      `SELECT u.id, u.email, u.username, u.role, u.created_at,
+              (SELECT COUNT(*)::int FROM orders o WHERE o.user_id = u.id) AS orders_count
+       FROM users u ORDER BY u.created_at DESC`
+    );
+    return rows;
   },
 
-  listAllOrders() {
-    const rows = db
-      .prepare(
-        `SELECT o.id, o.total_cents, o.status, o.created_at, u.username AS buyer
-         FROM orders o JOIN users u ON u.id = o.user_id
-         ORDER BY o.created_at DESC`
-      )
-      .all();
+  async listAllOrders() {
+    const { rows } = await q(
+      `SELECT o.id, o.total_cents, o.status, o.created_at, u.username AS buyer,
+              (SELECT COALESCE(SUM(quantity),0)::int FROM order_items oi WHERE oi.order_id = o.id) AS item_count
+       FROM orders o JOIN users u ON u.id = o.user_id
+       ORDER BY o.created_at DESC`
+    );
     return rows.map((r) => ({
       id: r.id,
       buyer: r.buyer,
       totalCents: r.total_cents,
       status: r.status,
       createdAt: r.created_at,
-      itemCount: db
-        .prepare("SELECT COALESCE(SUM(quantity),0) AS n FROM order_items WHERE order_id = ?")
-        .get(r.id).n,
+      itemCount: r.item_count,
     }));
   },
 
-  stats() {
-    const users = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
-    const products = db.prepare("SELECT COUNT(*) AS n FROM products").get().n;
-    const orders = db.prepare("SELECT COUNT(*) AS n FROM orders").get().n;
+  async stats() {
+    const users = (await q("SELECT COUNT(*)::int AS n FROM users")).rows[0].n;
+    const products = (await q("SELECT COUNT(*)::int AS n FROM products")).rows[0].n;
+    const orders = (await q("SELECT COUNT(*)::int AS n FROM orders")).rows[0].n;
     const revenue =
-      db.prepare("SELECT COALESCE(SUM(total_cents),0) AS s FROM orders").get().s ||
+      (await q("SELECT COALESCE(SUM(total_cents),0)::int AS s FROM orders")).rows[0].s ||
       0;
-    const lowStock = db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM (
-           SELECT product_id, SUM(stock) AS s FROM variants GROUP BY product_id HAVING s <= 3
-         )`
+    const lowStock = (
+      await q(
+        `SELECT COUNT(*)::int AS n FROM (
+           SELECT product_id, SUM(stock) AS s FROM variants GROUP BY product_id HAVING SUM(stock) <= 3
+         ) t`
       )
-      .get().n;
+    ).rows[0].n;
     return { users, products, orders, revenueCents: revenue, lowStock };
   },
 };

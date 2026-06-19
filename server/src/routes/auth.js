@@ -45,12 +45,12 @@ authRouter.post("/register", async (req, res) => {
       .status(400)
       .json({ error: "Le mot de passe doit contenir au moins 6 caractères." });
   }
-  if (store.findUserByEmail(email)) {
+  if (await store.findUserByEmail(email)) {
     return res.status(409).json({ error: "Cet e-mail est déjà utilisé." });
   }
 
   const passwordHash = await bcrypt.hash(String(password), 10);
-  const user = store.createUser({ email, username, passwordHash });
+  const user = await store.createUser({ email, username, passwordHash });
   const token = signToken(user);
 
   res.status(201).json({ token, user: publicUser(user) });
@@ -63,7 +63,7 @@ authRouter.post("/login", async (req, res) => {
     return res.status(400).json({ error: "E-mail et mot de passe requis." });
   }
 
-  const user = store.findUserByEmail(email);
+  const user = await store.findUserByEmail(email);
   if (!user) {
     return res.status(401).json({ error: "Identifiants incorrects." });
   }
@@ -108,7 +108,7 @@ authRouter.post("/google", async (req, res) => {
     }
     const username =
       payload.name || payload.email.split("@")[0] || "Utilisateur Google";
-    const user = store.findOrCreateOAuthUser({
+    const user = await store.findOrCreateOAuthUser({
       email: payload.email,
       username,
     });

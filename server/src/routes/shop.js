@@ -22,11 +22,11 @@ shopRouter.get("/options", (_req, res) => {
 });
 
 // Catalogue avec filtres : ?q=&category=&sort=&minPrice=&maxPrice= (prix en euros)
-shopRouter.get("/products", (req, res) => {
+shopRouter.get("/products", async (req, res) => {
   const { q, category, sort, minPrice, maxPrice } = req.query;
   const min = num(minPrice);
   const max = num(maxPrice);
-  const products = store.listProducts({
+  const products = await store.listProducts({
     q: typeof q === "string" ? q : undefined,
     category: typeof category === "string" ? category : undefined,
     sort: typeof sort === "string" ? sort : undefined,
@@ -37,8 +37,8 @@ shopRouter.get("/products", (req, res) => {
 });
 
 // Détail d'un produit
-shopRouter.get("/products/:id", (req, res) => {
-  const product = store.getProductById(req.params.id);
+shopRouter.get("/products/:id", async (req, res) => {
+  const product = await store.getProductById(req.params.id);
   if (!product) {
     return res.status(404).json({ error: "Produit introuvable." });
   }
@@ -46,22 +46,22 @@ shopRouter.get("/products/:id", (req, res) => {
 });
 
 // --- Favoris (wishlist) ---
-shopRouter.post("/products/:id/favorite", authRequired, (req, res) => {
-  const product = store.getProductById(req.params.id);
+shopRouter.post("/products/:id/favorite", authRequired, async (req, res) => {
+  const product = await store.getProductById(req.params.id);
   if (!product) {
     return res.status(404).json({ error: "Produit introuvable." });
   }
-  const favorites = store.toggleFavorite(req.user.id, product.id);
+  const favorites = await store.toggleFavorite(req.user.id, product.id);
   res.json({ favorites });
 });
 
-shopRouter.get("/me/favorites", authRequired, (req, res) => {
-  res.json({ products: store.listFavoriteProducts(req.user.id) });
+shopRouter.get("/me/favorites", authRequired, async (req, res) => {
+  res.json({ products: await store.listFavoriteProducts(req.user.id) });
 });
 
 // --- Commandes ---
-shopRouter.get("/me/orders", authRequired, (req, res) => {
-  res.json({ orders: store.listOrdersByUser(req.user.id) });
+shopRouter.get("/me/orders", authRequired, async (req, res) => {
+  res.json({ orders: await store.listOrdersByUser(req.user.id) });
 });
 
 // Passage de commande (panier -> commande)
@@ -98,7 +98,7 @@ shopRouter.post("/checkout", authRequired, async (req, res) => {
   }
 
   try {
-    const order = store.checkout(
+    const order = await store.checkout(
       req.user.id,
       {
         fullName: String(shipping.fullName).trim(),

@@ -9,18 +9,18 @@ const VALID_CATEGORIES = new Set(store.categories.map((c) => c.id));
 const STATUSES = ["payée", "en préparation", "expédiée", "livrée", "annulée"];
 
 // Statistiques
-adminRouter.get("/stats", (_req, res) => {
-  res.json({ stats: store.stats() });
+adminRouter.get("/stats", async (_req, res) => {
+  res.json({ stats: await store.stats() });
 });
 
 // Utilisateurs
-adminRouter.get("/users", (_req, res) => {
-  res.json({ users: store.listAllUsers() });
+adminRouter.get("/users", async (_req, res) => {
+  res.json({ users: await store.listAllUsers() });
 });
 
 // Produits (liste complète)
-adminRouter.get("/products", (_req, res) => {
-  res.json({ products: store.listProducts({}) });
+adminRouter.get("/products", async (_req, res) => {
+  res.json({ products: await store.listProducts({}) });
 });
 
 function validateProductBody(body) {
@@ -43,6 +43,7 @@ function validateProductBody(body) {
     if (!v || !v.size) return { error: "Taille invalide." };
     const stock = Number(v.stock);
     cleanVariants.push({
+      color: v.color ? String(v.color).trim() : "",
       size: String(v.size).trim(),
       stock: Number.isFinite(stock) && stock >= 0 ? Math.floor(stock) : 0,
     });
@@ -57,7 +58,8 @@ function validateProductBody(body) {
         : String(name).trim(),
       imageUrl:
         typeof imageUrl === "string" &&
-        (imageUrl.startsWith("/uploads/") || imageUrl.startsWith("https://"))
+        (imageUrl.startsWith("/uploads/") ||
+          imageUrl.startsWith("https://"))
           ? imageUrl
           : `https://picsum.photos/seed/${Date.now()}/500/600`,
       variants: cleanVariants,
@@ -66,40 +68,40 @@ function validateProductBody(body) {
 }
 
 // Créer un produit
-adminRouter.post("/products", (req, res) => {
+adminRouter.post("/products", async (req, res) => {
   const { error, data } = validateProductBody(req.body);
   if (error) return res.status(400).json({ error });
-  res.status(201).json({ product: store.createProduct(data) });
+  res.status(201).json({ product: await store.createProduct(data) });
 });
 
 // Modifier un produit
-adminRouter.put("/products/:id", (req, res) => {
+adminRouter.put("/products/:id", async (req, res) => {
   const { error, data } = validateProductBody(req.body);
   if (error) return res.status(400).json({ error });
-  const updated = store.updateProduct(req.params.id, data);
+  const updated = await store.updateProduct(req.params.id, data);
   if (!updated) return res.status(404).json({ error: "Produit introuvable." });
   res.json({ product: updated });
 });
 
 // Supprimer un produit
-adminRouter.delete("/products/:id", (req, res) => {
-  const ok = store.deleteProduct(req.params.id);
+adminRouter.delete("/products/:id", async (req, res) => {
+  const ok = await store.deleteProduct(req.params.id);
   if (!ok) return res.status(404).json({ error: "Produit introuvable." });
   res.json({ deleted: true });
 });
 
 // Commandes
-adminRouter.get("/orders", (_req, res) => {
-  res.json({ orders: store.listAllOrders() });
+adminRouter.get("/orders", async (_req, res) => {
+  res.json({ orders: await store.listAllOrders() });
 });
 
 // Mettre à jour le statut d'une commande
-adminRouter.patch("/orders/:id/status", (req, res) => {
+adminRouter.patch("/orders/:id/status", async (req, res) => {
   const { status } = req.body ?? {};
   if (!STATUSES.includes(status)) {
     return res.status(400).json({ error: "Statut invalide." });
   }
-  const order = store.setOrderStatus(req.params.id, status);
+  const order = await store.setOrderStatus(req.params.id, status);
   if (!order) return res.status(404).json({ error: "Commande introuvable." });
   res.json({ order });
 });

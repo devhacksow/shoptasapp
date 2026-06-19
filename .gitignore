@@ -30,3 +30,6 @@ server/uploads/
 
 # Variables d'environnement locales
 server/.env
+
+# Artefacts TypeScript
+*.tsbuildinfo

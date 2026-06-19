@@ -36,17 +36,18 @@ git push -u origin main
    | `ADMIN_PASSWORD` | un mot de passe fort |
    | `GOOGLE_CLIENT_ID` | ton ID client Google OAuth |
    | `STRIPE_SECRET_KEY` | `sk_test_...` (ou `sk_live_...` en prod) |
+   | `DATABASE_URL` | la connection string Neon PostgreSQL |
+   | `CLOUDINARY_CLOUD_NAME` | ton cloud name Cloudinary |
+   | `CLOUDINARY_API_KEY` | ta clé API Cloudinary |
+   | `CLOUDINARY_API_SECRET` | ton secret API Cloudinary |
    | `APP_URL` | l'URL Vercel du front (ex. `https://shoptasapp.vercel.app`) |
    | `CORS_ORIGIN` | la même URL Vercel |
    | `SMTP_*` | (facultatif) pour les e-mails réels |
 5. Déploie. Note l'URL publique, ex. `https://shoptasapp-api.onrender.com`.
 
-> **Persistance des données** : le plan gratuit Render a un disque éphémère
-> (les commandes/comptes/images sont réinitialisés à chaque redéploiement).
-> Pour conserver les données : ajoute un **disque persistant** (plan payant),
-> monte-le sur `/data` et ajoute la variable `DATA_DIR=/data`.
-> Alternative durable : migrer vers **PostgreSQL** (Neon/Supabase) + stockage
-> objet (Cloudinary/S3) pour les images.
+> **Persistance** : les données sont dans **PostgreSQL (Neon)** et les images
+> dans **Cloudinary** — rien n'est stocké sur le disque du serveur, donc le
+> **plan gratuit Render convient** (aucune perte de données aux redéploiements).
 
 ## 3. Déployer le front sur Vercel
 
