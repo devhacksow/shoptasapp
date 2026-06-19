@@ -1,0 +1,171 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer {
+  background: var(--color-bg);
+  width: 100%;
+  max-width: 420px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.2);
+  animation: slide 200ms ease;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.close {
+  border: none;
+  background: #f3f4f6;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.empty {
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.line {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.img {
+  width: 70px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.size {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.linePrice {
+  font-weight: 700;
+}
+
+.qtyControl {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: var(--space-1);
+  width: fit-content;
+}
+
+.qtyControl button {
+  border: none;
+  background: #f3f4f6;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.qtyControl button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.qtyControl span {
+  min-width: 32px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.total {
+  font-weight: 800;
+}
+
+.checkout {
+  background: var(--color-text);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: var(--space-3);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}

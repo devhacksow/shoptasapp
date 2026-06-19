@@ -1,0 +1,54 @@
+/* Variables CSS globales de la landing page */
+:root {
+  /* Point de rupture responsive centralisé (R8.1, R8.4, R5.3, R5.4) */
+  --breakpoint-md: 768px;
+
+  /* Taille de police de base >= 14px (R8.6) */
+  --font-size-base: 16px;
+  --font-size-min: 14px;
+
+  /* Palette de base */
+  --color-bg: #ffffff;
+  --color-text: #171717;
+  --color-primary: #09b1ba;
+  --color-muted: #6b7280;
+  --color-border: #e5e7eb;
+
+  /* Rythme d'espacement */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: var(--font-size-base);
+}
+
+body {
+  margin: 0;
+  /* Police de base >= 14px garantie pour 320..1920px (R8.6) */
+  font-size: max(var(--font-size-min), 1rem);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  line-height: 1.5;
+  /* Pas de défilement horizontal entre 320 et 1920px (R8.2) */
+  overflow-x: hidden;
+}
+
+/* Contrainte de largeur des images <= largeur du Viewport (R8.3) */
+img {
+  max-width: 100%;
+  height: auto;
+}

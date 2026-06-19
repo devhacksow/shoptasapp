@@ -1,0 +1,143 @@
+.bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-3);
+}
+
+.logo {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.cart {
+  position: relative;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.4rem;
+  padding: 0 var(--space-1);
+  line-height: 1;
+}
+
+.cartBadge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background: var(--color-text);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.admin {
+  background: #171717;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: var(--space-2) var(--space-3);
+  font-size: max(var(--font-size-min), 0.9rem);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.user {
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text);
+  padding: 0;
+}
+
+.user:hover {
+  text-decoration: underline;
+}
+
+.userBox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.signin {
+  background: none;
+  color: var(--color-text);
+  border: 1px solid var(--color-text);
+  border-radius: 8px;
+  padding: var(--space-2) var(--space-3);
+  font-size: max(var(--font-size-min), 0.9rem);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mobileRight {
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.burger {
+  border: none;
+  background: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.mobileMenu {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+@media (max-width: 767px) {
+  .actions {
+    display: none;
+  }
+  .mobileRight {
+    display: flex;
+  }
+  .mobileMenu {
+    display: flex;
+  }
+}

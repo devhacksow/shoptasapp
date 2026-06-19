@@ -1,0 +1,32 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Backend SQLite database
+server/*.db
+server/*.db-shm
+server/*.db-wal
+
+# Images uploadées
+server/uploads/
+
+# Variables d'environnement locales
+server/.env

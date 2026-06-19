@@ -1,0 +1,49 @@
+# Blueprint Render pour le back-end ShopTaSapp.
+# Importe ce dépôt sur Render (New + > Blueprint) pour créer le service.
+services:
+  - type: web
+    name: shoptasapp-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      # Généré automatiquement par Render
+      - key: JWT_SECRET
+        generateValue: true
+      # À renseigner dans le dashboard Render (valeurs sensibles)
+      - key: ADMIN_EMAIL
+        value: admin@shoptasapp.com
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      # URL du front Vercel (ex. https://shoptasapp.vercel.app)
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      # SMTP (facultatif — sinon e-mails en console)
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        value: ShopTaSapp <no-reply@shoptasapp.com>
+    # IMPORTANT : pour conserver les données (commandes, comptes, images),
+    # ajoute un disque persistant (plan payant Render) et définis DATA_DIR=/data.
+    # Sur le plan gratuit sans disque, les données sont réinitialisées à chaque
+    # redéploiement/redémarrage.
+    # disk:
+    #   name: data
+    #   mountPath: /data
+    #   sizeGB: 1
+    # Puis ajoute la variable : DATA_DIR=/data

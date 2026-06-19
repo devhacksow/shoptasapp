@@ -1,0 +1,27 @@
+{
+  "name": "shoptasapp-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Back-end API e-commerce ShopTaSapp",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "google-auth-library": "^10.7.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
+    "nodemailer": "^9.0.1",
+    "stripe": "^22.2.2"
+  }
+}
