@@ -92,12 +92,14 @@ export async function initDb() {
   await seedAdmin();
 }
 
-// Met à jour les images des produits de démo encore en picsum vers les visuels
-// correspondant à la description (sans toucher aux images modifiées par l'admin).
+// Met à jour les images des produits de démo (picsum/loremflickr) vers les
+// visuels Unsplash correspondants, sans toucher aux images uploadées (Cloudinary).
 async function refreshSeedImages() {
   for (const p of seedProducts) {
     await q(
-      "UPDATE products SET image_url = $1 WHERE id = $2 AND image_url LIKE '%picsum%'",
+      `UPDATE products SET image_url = $1
+       WHERE id = $2
+         AND (image_url LIKE '%picsum%' OR image_url LIKE '%loremflickr%')`,
       [p.imageUrl, p.id]
     );
   }
