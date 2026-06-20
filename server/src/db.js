@@ -88,7 +88,19 @@ export async function initDb() {
   `);
 
   await seedCatalog();
+  await refreshSeedImages();
   await seedAdmin();
+}
+
+// Met à jour les images des produits de démo encore en picsum vers les visuels
+// correspondant à la description (sans toucher aux images modifiées par l'admin).
+async function refreshSeedImages() {
+  for (const p of seedProducts) {
+    await q(
+      "UPDATE products SET image_url = $1 WHERE id = $2 AND image_url LIKE '%picsum%'",
+      [p.imageUrl, p.id]
+    );
+  }
 }
 
 async function seedCatalog() {
