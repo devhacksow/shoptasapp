@@ -140,4 +140,21 @@
   .mobileMenu {
     display: flex;
   }
+  .inner {
+    padding: var(--space-2);
+    gap: var(--space-2);
+  }
+  .logo {
+    font-size: 1.15rem;
+  }
+}
+
+/* Très petits écrans : logo encore réduit pour laisser la place à la recherche */
+@media (max-width: 360px) {
+  .logo {
+    font-size: 1rem;
+  }
+  .inner {
+    gap: var(--space-1);
+  }
 }

@@ -50,3 +50,13 @@
 .cta:hover {
   transform: translateY(-2px);
 }
+
+@media (max-width: 767px) {
+  .hero {
+    padding: var(--space-4) var(--space-3);
+    margin: var(--space-3) 0;
+  }
+  .cta {
+    width: 100%;
+  }
+}
